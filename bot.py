@@ -1,61 +1,116 @@
-import telebot
-import time
+import requests
+import random
 import json
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
-TOKEN = '7904713151:AAFeLmjtQm8_1KEKrcpjyaX36ZHVHDuijMU'  # Вставь сюда свой токен
-bot = telebot.TeleBot(TOKEN)
+BOT_TOKEN = "7904713151:AAFeLmjtQm8_1KEKrcpjyaX36ZHVHDuijMU"
 
-ssh_list = [
-    {"host": "sg1.fastssh.com", "port": "443", "username": "user1", "password": "pass1", "expires": "7 дней"},
-    {"host": "jp1.fastssh.com", "port": "443", "username": "user2", "password": "pass2", "expires": "7 дней"},
-    {"host": "us1.fastssh.com", "port": "443", "username": "user3", "password": "pass3", "expires": "7 дней"},
-]
+# Список стран и их параметры для SSHOcean (примерно)
+COUNTRIES = {
+    "germany": {"id": "de", "name": "Germany 🇩🇪"},
+    "netherlands": {"id": "nl", "name": "Netherlands 🇳🇱"},
+}
 
-history_file = "ssh_history.json"
+def generate_dark_tunnel_config(host, port, username, password, sni="bug.com"):
+    return f"""[SSH]
+Host: {host}
+Port: {port}
+Username: {username}
+Password: {password}
+SNI: {sni}
+Payload: GET wss://{sni}/ HTTP/1.1[crlf]Host: {sni}[crlf]Connection: Upgrade[crlf]Upgrade: websocket[crlf][crlf]
+"""
 
-try:
-    with open(history_file, "r") as f:
-        user_history = json.load(f)
-except:
-    user_history = {}
+def generate_npv_config(host, port, username, password, sni="bug.com"):
+    return {
+        "v": 1,
+        "ps": "SSHOcean",
+        "add": host,
+        "port": port,
+        "method": "ssh",
+        "user": username,
+        "pass": password,
+        "sni": sni,
+        "proto": "ssh",
+        "payload": f"GET wss://{sni}/ HTTP/1.1[crlf]Host: {sni}[crlf][crlf]",
+        "tls": True
+    }
 
-def save_history():
-    with open(history_file, "w") as f:
-        json.dump(user_history, f)
+async def start_ssh(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton(COUNTRIES["germany"]["name"], callback_data="country_germany")],
+        [InlineKeyboardButton(COUNTRIES["netherlands"]["name"], callback_data="country_netherlands")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Выберите страну сервера:", reply_markup=reply_markup)
 
-@bot.message_handler(commands=['start'])
-def start(message):
-    bot.send_message(message.chat.id, "Привет! Напиши /getssh, чтобы получить SSH аккаунт (до 3 раз в день).")
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
-@bot.message_handler(commands=['getssh'])
-def getssh(message):
-    user_id = str(message.from_user.id)
-    today = time.strftime("%Y-%m-%d")
-
-    if user_id in user_history:
-        counts = user_history[user_id].get(today, 0)
-        if counts >= 3:
-            bot.send_message(message.chat.id, "⚠️ Вы уже получили 3 аккаунта сегодня. Приходите завтра.")
-            return
-    else:
-        user_history[user_id] = {}
-
-    if not ssh_list:
-        bot.send_message(message.chat.id, "❌ Нет доступных аккаунтов. Попробуйте позже.")
+    country_key = query.data.replace("country_", "")
+    if country_key not in COUNTRIES:
+        await query.edit_message_text("Выбран неверный вариант.")
         return
 
-    acc = ssh_list.pop(0)
-    user_history[user_id][today] = user_history[user_id].get(today, 0) + 1
-    save_history()
+    country = COUNTRIES[country_key]
+    await query.edit_message_text(f"Генерируем SSH аккаунт для {country['name']}...")
 
-    text = f"""✅ Ваш SSH аккаунт:
-Host: {acc['host']}
-Port: {acc['port']}
-Username: {acc['username']}
-Password: {acc['password']}
-Срок: {acc['expires']}
+    ssh_data = get_ssh_from_sshocean(country["id"])
+    if not ssh_data:
+        await query.edit_message_text("Ошибка при получении SSH аккаунта. Попробуйте позже.")
+        return
+
+    host = ssh_data["host"]
+    port = ssh_data["port"]
+    username = ssh_data["user"]
+    password = ssh_data["pass"]
+
+    dark_tunnel_conf = generate_dark_tunnel_config(host, port, username, password)
+    npv_conf = generate_npv_config(host, port, username, password)
+
+    text = f"""🎉 <b>SSH Account</b>:
+<b>Host:</b> {host}
+<b>Port:</b> {port}
+<b>User:</b> {username}
+<b>Password:</b> {password}
+
+🔧 <b>Dark Tunnel Config:</b>
+<pre>{dark_tunnel_conf}</pre>
 """
-    bot.send_message(message.chat.id, text)
 
-print("Бот запущен. Ожидание сообщений...")
-bot.polling()
+    await query.edit_message_text(text, parse_mode="HTML")
+
+    with open("npv_config.json", "w") as f:
+        json.dump(npv_conf, f, indent=2)
+
+    await context.bot.send_document(query.message.chat_id, InputFile("npv_config.json", filename="npv_config.json"))
+
+def get_ssh_from_sshocean(country_id):
+    # Здесь простой пример запроса к SSHOcean
+    # Их сайт не предоставляет публичное API,
+    # поэтому нужно анализировать HTML или использовать их open API (если есть)
+    # Здесь будет пример с web scraping (упрощённо)
+    try:
+        url = f"https://sshocean.com/ssh-account-generator?country={country_id}"
+        r = requests.get(url)
+        if r.status_code != 200:
+            return None
+        # Парсинг страницы для получения аккаунта (нужно реализовать под конкретный сайт)
+        # Ниже пример фиктивных данных:
+        return {
+            "host": "sg1.fastssh.com",
+            "port": 443,
+            "user": "user123",
+            "pass": "pass123"
+        }
+    except Exception as e:
+        print("Ошибка при получении SSH:", e)
+        return None
+
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("ssh", start_ssh))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.run_polling()
