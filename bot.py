@@ -4,7 +4,7 @@ import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
-BOT_TOKEN = "7904713151:AAFeLmjtQm8_1KEKrcpjyaX36ZHVHDuijMU"
+BOT_TOKEN = "8156834424:AAHny7W7T8fjsuIal-tNNXs8ywcLPdj5aD4"
 
 # Список стран и их параметры для SSHOcean (примерно)
 COUNTRIES = {
