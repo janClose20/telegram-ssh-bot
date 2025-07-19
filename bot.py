@@ -1,12 +1,10 @@
 import requests
-import random
 import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
 BOT_TOKEN = "8156834424:AAHny7W7T8fjsuIal-tNNXs8ywcLPdj5aD4"
 
-# Список стран и их параметры для SSHOcean (примерно)
 COUNTRIES = {
     "germany": {"id": "de", "name": "Germany 🇩🇪"},
     "netherlands": {"id": "nl", "name": "Netherlands 🇳🇱"},
@@ -80,25 +78,25 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 <pre>{dark_tunnel_conf}</pre>
 """
 
+    # Отредактируем сообщение, чтобы показать данные
     await query.edit_message_text(text, parse_mode="HTML")
 
-    with open("npv_config.json", "w") as f:
+    # Сохраним npv конфиг во временный файл
+    filename = f"npv_config_{query.from_user.id}.json"
+    with open(filename, "w") as f:
         json.dump(npv_conf, f, indent=2)
 
-    await context.bot.send_document(query.message.chat_id, InputFile("npv_config.json", filename="npv_config.json"))
+    # Отправим файл
+    await context.bot.send_document(chat_id=query.message.chat_id, document=InputFile(filename), filename="npv_config.json")
 
 def get_ssh_from_sshocean(country_id):
-    # Здесь простой пример запроса к SSHOcean
-    # Их сайт не предоставляет публичное API,
-    # поэтому нужно анализировать HTML или использовать их open API (если есть)
-    # Здесь будет пример с web scraping (упрощённо)
+    # Тут заглушка — в реальности надо парсить или использовать API SSHOcean
     try:
         url = f"https://sshocean.com/ssh-account-generator?country={country_id}"
         r = requests.get(url)
         if r.status_code != 200:
             return None
-        # Парсинг страницы для получения аккаунта (нужно реализовать под конкретный сайт)
-        # Ниже пример фиктивных данных:
+        # Пример фиктивных данных
         return {
             "host": "sg1.fastssh.com",
             "port": 443,
